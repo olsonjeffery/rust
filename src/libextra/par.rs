@@ -14,7 +14,7 @@ use std::num;
 use std::ptr;
 use std::sys;
 use std::vec;
-use future_spawn = future::spawn;
+use future_spawn = std::future::spawn;
 
 /**
  * The maximum number of tasks this module will spawn for a single

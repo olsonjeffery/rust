@@ -47,7 +47,6 @@ pub mod rc;
 pub mod sync;
 pub mod arc;
 pub mod comm;
-pub mod future;
 pub mod task_pool;
 pub mod flatpipes;
 

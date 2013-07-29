@@ -26,11 +26,14 @@
 #[allow(missing_doc)];
 
 
-use std::cast;
-use std::cell::Cell;
-use std::comm::{PortOne, oneshot, send_one, recv_one};
-use std::task;
-use std::util::replace;
+use cast;
+use cell::Cell;
+use comm::{PortOne, oneshot, send_one, recv_one};
+use task;
+use util::replace;
+use kinds::Send;
+use clone::Clone;
+use ops::Drop;
 
 #[doc = "The future type"]
 pub struct Future<A> {
@@ -162,9 +165,9 @@ pub fn spawn<A:Send>(blk: ~fn() -> A) -> Future<A> {
 mod test {
     use future::*;
 
-    use std::cell::Cell;
-    use std::comm::{oneshot, send_one};
-    use std::task;
+    use cell::Cell;
+    use comm::{oneshot, send_one};
+    use task;
 
     #[test]
     fn test_from_value() {
