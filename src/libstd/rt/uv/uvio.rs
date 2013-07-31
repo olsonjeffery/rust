@@ -32,7 +32,7 @@ use unstable::sync::Exclusive;
 
 #[cfg(test)] use container::Container;
 #[cfg(test)] use unstable::run_in_bare_thread;
-#[cfg(test)] use rt::test::{spawntask,
+#[cfg(test)] use rt::test::{spawntask_immediately,
                             next_test_ip4,
                             run_in_newsched_task};
 #[cfg(test)] use iterator::{Iterator, range};
@@ -238,6 +238,31 @@ impl UvIoFactory {
     pub fn uv_loop<'a>(&'a mut self) -> &'a mut Loop {
         match self { &UvIoFactory(ref mut ptr) => ptr }
     }
+
+    fn tcp_connect_common(&mut self, addr: IpAddr,
+                                cleanup_cb: ~fn(Result<TcpWatcher, UvError>)) {
+        let mut tcp_watcher = TcpWatcher::new(self.uv_loop());
+        let cleanup_cb_cell = Cell::new(cleanup_cb);
+
+        // Wait for a connection
+        do tcp_watcher.connect(addr) |stream_watcher, status| {
+            rtdebug!("connect: in connect callback");
+            let cleanup_cb = cleanup_cb_cell.take();
+            if status.is_none() {
+                rtdebug!("status is none");
+                let tcp_watcher =
+                    NativeHandle::from_native_handle(stream_watcher.native_handle());
+                let res = Ok(tcp_watcher);
+                cleanup_cb(res);
+            } else {
+                rtdebug!("status is some");
+                do stream_watcher.close {
+                    let res = Err(status.get());
+                    cleanup_cb(res);
+                }
+            };
+        }
+    }
 }
 
 impl IoFactory for UvIoFactory {
@@ -256,35 +281,19 @@ impl IoFactory for UvIoFactory {
         do scheduler.deschedule_running_task_and_then |_, task| {
 
             rtdebug!("connect: entered scheduler context");
-            let mut tcp_watcher = TcpWatcher::new(self.uv_loop());
             let task_cell = Cell::new(task);
-
-            // Wait for a connection
-            do tcp_watcher.connect(addr) |stream_watcher, status| {
-                rtdebug!("connect: in connect callback");
-                if status.is_none() {
-                    rtdebug!("status is none");
-                    let tcp_watcher =
-                        NativeHandle::from_native_handle(stream_watcher.native_handle());
-                    let res = Ok(~UvTcpStream(tcp_watcher));
-
-                    // Store the stream in the task's stack
-                    unsafe { (*result_cell_ptr).put_back(res); }
-
-                    // Context switch
-                    let scheduler = Local::take::<Scheduler>();
-                    scheduler.resume_blocked_task_immediately(task_cell.take());
-                } else {
-                    rtdebug!("status is some");
-                    let task_cell = Cell::new(task_cell.take());
-                    do stream_watcher.close {
-                        let res = Err(uv_error_to_io_error(status.unwrap()));
-                        unsafe { (*result_cell_ptr).put_back(res); }
-                        let scheduler = Local::take::<Scheduler>();
-                        scheduler.resume_blocked_task_immediately(task_cell.take());
-                    }
+            self.tcp_connect_common(addr, |res| {
+                let res = match res {
+                    Ok(tcp_watcher) => Ok(~UvTcpStream(tcp_watcher)),
+                    Err(uv_err) => Err(uv_error_to_io_error(uv_err))
                 };
-            }
+                let task_cell = Cell::new(task_cell.take());
+                // Store the stream in the task's stack
+                unsafe { (*result_cell_ptr).put_back(res); }
+                // Context switch
+                let scheduler = Local::take::<Scheduler>();
+                scheduler.resume_blocked_task_immediately(task_cell.take());
+            });
         }
 
         assert!(!result_cell.is_empty());
