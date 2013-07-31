@@ -37,13 +37,13 @@ use unstable::sync::Exclusive;
                             run_in_newsched_task};
 #[cfg(test)] use iterator::{Iterator, range};
 
-enum SocketNameKind {
+pub enum SocketNameKind {
     TcpPeer,
     Tcp,
     Udp
 }
 
-fn socket_name<T, U: Watcher + NativeHandle<*T>>(sk: SocketNameKind,
+pub fn socket_name<T, U: Watcher + NativeHandle<*T>>(sk: SocketNameKind,
                                                  handle: U) -> Result<SocketAddr, IoError> {
 
     let getsockname = match sk {
