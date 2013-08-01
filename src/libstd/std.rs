@@ -166,7 +166,6 @@ pub mod task;
 pub mod comm;
 pub mod pipes;
 pub mod local_data;
-pub mod future;
 
 
 /* Runtime and platform support */
