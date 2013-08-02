@@ -28,7 +28,7 @@
 
 use cast;
 use cell::Cell;
-use comm::{PortOne, ChanOne, oneshot, send_one, recv_one, stream};
+use comm::{PortOne, ChanOne, oneshot, send_one, recv_one};
 use task;
 use util::replace;
 use kinds::Send;
@@ -50,20 +50,17 @@ impl<A> Drop for Future<A> {
 }
 
 priv enum FutureState<A> {
-    PendingPromise(PortOne<A>),
     Pending(~fn() -> A),
     Evaluating,
     Forced(A)
 }
 
 /// The Promise type. Can provide the value of a Future
-pub struct Promise<A> {
-    fulfillment_chan: ChanOne<A>
-}
+pub struct Promise<A> (ChanOne<A>);
 
 impl<A:Send> Promise<A> {
-    pub fn fulfill(&self, v: A) {
-        self.fulfillment_chan.send(v);
+    pub fn fulfill(self, v: A) {
+        self.send(v);
     }
 }
 
@@ -100,8 +97,7 @@ impl<A> Future<A> {
                 match self.state {
                     Forced(ref mut v) => { return cast::transmute(v); }
                     Evaluating => fail!("Recursive forcing of future!"),
-                    Pending(_) => {},
-                    PendingPromise(_) => {}
+                    Pending(_) => {}
                 }
             }
             {
@@ -110,10 +106,6 @@ impl<A> Future<A> {
                     Forced(_) | Evaluating => fail!("Logic error."),
                     Pending(f) => {
                         self.state = Forced(f());
-                        cast::transmute(self.get_ref())
-                    },
-                    PendingPromise(p) => {
-                        self.state = Forced(p.recv());
                         cast::transmute(self.get_ref())
                     }
                 }
@@ -135,7 +127,12 @@ pub fn from_value<A>(val: A) -> Future<A> {
 
 pub fn pair<A:Send>() -> (Future<A>, Promise<A>) {
     let (p, c) = oneshot();
-    (Future{state:PendingPromise(p)}, Promise{fulfillment_chan:c})
+    let p_cell = Cell::new(p);
+    let f = Future{state:Pending(|| {
+        let p = p_cell.take();
+        p.recv()
+    })};
+    (f, Promise(c))
 }
 
 pub fn from_port<A:Send>(port: PortOne<A>) -> Future<A> {
