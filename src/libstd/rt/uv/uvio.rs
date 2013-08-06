@@ -257,7 +257,7 @@ impl UvIoFactory {
             } else {
                 rtdebug!("status is some");
                 do stream_watcher.close {
-                    let res = Err(status.get());
+                    let res = Err(status.unwrap());
                     cleanup_cb(res);
                 }
             };
