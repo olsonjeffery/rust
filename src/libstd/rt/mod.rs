@@ -93,8 +93,14 @@ mod sched;
 /// Synchronous I/O.
 pub mod io;
 
+/// Async I/O
+pub mod aio;
+
 /// The EventLoop and internal synchronous I/O interface.
 mod rtio;
+
+/// Interfaces for asynchronous I/O.
+mod rtaio;
 
 /// libuv and default rtio implementation.
 pub mod uv;

@@ -30,9 +30,12 @@ use rt::local::Local;
 use str::StrSlice;
 use unstable::sync::Exclusive;
 
+use rt::uv::uvaio::{UvTcpStreamAsync, UvTcpListenerAsync};
+use rt::rtaio::{RtaioTcpStreamAsync, RtaioTcpListenerAsync};
+
 #[cfg(test)] use container::Container;
 #[cfg(test)] use unstable::run_in_bare_thread;
-#[cfg(test)] use rt::test::{spawntask_immediately,
+#[cfg(test)] use rt::test::{spawntask,
                             next_test_ip4,
                             run_in_newsched_task};
 #[cfg(test)] use iterator::{Iterator, range};
@@ -239,7 +242,7 @@ impl UvIoFactory {
         match self { &UvIoFactory(ref mut ptr) => ptr }
     }
 
-    fn tcp_connect_common(&mut self, addr: IpAddr,
+    fn tcp_connect_common(&mut self, addr: SocketAddr,
                                 cleanup_cb: ~fn(Result<TcpWatcher, UvError>)) {
         let mut tcp_watcher = TcpWatcher::new(self.uv_loop());
         let cleanup_cb_cell = Cell::new(cleanup_cb);
@@ -261,6 +264,15 @@ impl UvIoFactory {
                     cleanup_cb(res);
                 }
             };
+        }
+    }
+    fn tcp_bind_common(&mut self, addr: SocketAddr) -> Result<~RtioTcpListenerObject, IoError> {
+        let mut watcher = TcpWatcher::new(self.uv_loop());
+        match watcher.bind(addr) {
+            Ok(_) => Ok(~UvTcpListener::new(watcher)),
+            Err(uverr) => {
+                Err(uv_error_to_io_error(uverr))
+            }
         }
     }
 }
@@ -299,12 +311,26 @@ impl IoFactory for UvIoFactory {
         assert!(!result_cell.is_empty());
         return result_cell.take();
     }
+    fn tcp_connect_async(&mut self, addr: SocketAddr,
+                         cb: ~fn(Result<~RtaioTcpStreamAsync, IoError>)) {
+        self.tcp_connect_common(addr, |res| {
+            match res {
+                Ok(watcher) => {
+                    let r = Ok(~UvTcpStreamAsync(watcher) as ~RtaioTcpStreamAsync);
+                    cb(r);
+                },
+                Err(uverr) => {
+                    cb(Err(uv_error_to_io_error(uverr)));
+                }
+            }
+        });
+    }
 
     fn tcp_bind(&mut self, addr: SocketAddr) -> Result<~RtioTcpListenerObject, IoError> {
         let mut watcher = TcpWatcher::new(self.uv_loop());
         match watcher.bind(addr) {
             Ok(_) => Ok(~UvTcpListener::new(watcher)),
-            Err(uverr) => {
+            Err(err) => {
                 let scheduler = Local::take::<Scheduler>();
                 do scheduler.deschedule_running_task_and_then |_, task| {
                     let task_cell = Cell::new(task);
@@ -313,7 +339,24 @@ impl IoFactory for UvIoFactory {
                         scheduler.resume_blocked_task_immediately(task_cell.take());
                     }
                 }
-                Err(uv_error_to_io_error(uverr))
+                Err(uv_error_to_io_error(err))
+            }
+        }
+    }
+    fn tcp_bind_async(&mut self, addr: SocketAddr) -> Result<~RtaioTcpListenerAsync, IoError> {
+        let mut watcher = TcpWatcher::new(self.uv_loop());
+        match watcher.bind(addr) {
+            Ok(_) => Ok(~UvTcpListenerAsync::new(watcher) as ~RtaioTcpListenerAsync),
+            Err(err) => {
+                let scheduler = Local::take::<Scheduler>();
+                do scheduler.deschedule_running_task_and_then |_, task| {
+                    let task_cell = Cell::new(task);
+                    do watcher.as_stream().close {
+                        let scheduler = Local::take::<Scheduler>();
+                        scheduler.resume_blocked_task_immediately(task_cell.take());
+                    }
+                }
+                Err(uv_error_to_io_error(err))
             }
         }
     }

@@ -182,7 +182,7 @@ pub fn spawn<A:Send>(blk: ~fn() -> A) -> Future<A> {
 
 #[cfg(test)]
 mod test {
-    use future::*;
+    use unstable::future::*;
 
     use cell::Cell;
     use comm::{oneshot, send_one};

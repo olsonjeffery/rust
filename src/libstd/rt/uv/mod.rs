@@ -62,6 +62,9 @@ pub use self::async::AsyncWatcher;
 /// The implementation of `rtio` for libuv
 pub mod uvio;
 
+/// The implementation of `rtaio` for libuv
+pub mod uvaio;
+
 /// C bindings to libuv
 pub mod uvll;
 

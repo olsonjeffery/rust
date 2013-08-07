@@ -15,6 +15,8 @@ use rt::io::IoError;
 use super::io::net::ip::{IpAddr, SocketAddr};
 use rt::uv::uvio;
 
+use rt::rtaio::{RtaioTcpStreamAsync, RtaioTcpListenerAsync};
+
 // XXX: ~object doesn't work currently so these are some placeholder
 // types to use instead
 pub type EventLoopObject = uvio::UvEventLoop;
@@ -45,7 +47,10 @@ pub trait RemoteCallback {
 
 pub trait IoFactory {
     fn tcp_connect(&mut self, addr: SocketAddr) -> Result<~RtioTcpStreamObject, IoError>;
+    fn tcp_connect_async(&mut self, addr: SocketAddr,
+                         cb: ~fn(Result<~RtaioTcpStreamAsync, IoError>));
     fn tcp_bind(&mut self, addr: SocketAddr) -> Result<~RtioTcpListenerObject, IoError>;
+    fn tcp_bind_async(&mut self, addr: SocketAddr) -> Result<~RtaioTcpListenerAsync, IoError>;
     fn udp_bind(&mut self, addr: SocketAddr) -> Result<~RtioUdpSocketObject, IoError>;
     fn timer_init(&mut self) -> Result<~RtioTimerObject, IoError>;
 }
